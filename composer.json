@@ -1,0 +1,51 @@
+{
+  "name": "motakabbir/activity-logger",
+  "description": "A powerful Laravel package for automatically tracking model changes and user activities with IP tracking",
+  "type": "library",
+  "keywords": [
+    "laravel",
+    "audit",
+    "activity",
+    "log",
+    "user tracking",
+    "model changes"
+  ],
+  "homepage": "https://github.com/Motakabbir/activity-logger",
+  "license": "MIT",
+  "support": {
+    "issues": "https://github.com/Motakabbir/activity-logger/issues",
+    "source": "https://github.com/Motakabbir/activity-logger"
+  },
+  "authors": [
+    {
+      "name": "Motakabbir Morshed",
+      "email": "motakabbir.developer@gmail.com",
+      "role": "Developer"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Loctracker\\ActivityLogger\\": "src/"
+    }
+  },
+  "require": {
+    "php": "^7.4|^8.0",
+    "laravel/framework": "^8.0|^9.0|^10.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.0",
+    "orchestra/testbench": "^6.0|^7.0|^8.0"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Loctracker\\ActivityLogger\\ActivityLoggerServiceProvider"
+      ],
+      "aliases": {
+        "ActivityLogger": "Loctracker\\ActivityLogger\\Facades\\ActivityLogger"
+      }
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
