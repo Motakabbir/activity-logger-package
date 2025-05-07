@@ -36,13 +36,15 @@ class ActivityLoggerServiceProvider extends ServiceProvider
         // Load the configuration file
         $this->publishes([
             __DIR__ . '/Config/activity-logger.php' => config_path('activity-logger.php'),
-        ], 'config');
+        ], 'config');        // Load migrations
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__ . '/Migrations' => database_path('migrations'),
+            ], 'migrations');
 
-        // Load migrations
-        $this->publishes([
-            __DIR__ . '/Migrations' => database_path('migrations'),
-        ], 'migrations');
-
-        $this->loadMigrationsFrom(__DIR__ . '/Migrations');
+            if (!$this->app->runningUnitTests()) {
+                $this->loadMigrationsFrom(__DIR__ . '/Migrations');
+            }
+        }
     }
 }

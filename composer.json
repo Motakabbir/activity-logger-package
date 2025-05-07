@@ -28,6 +28,11 @@
       "Loctracker\\ActivityLogger\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
   "require": {
     "php": "^7.4|^8.0",
     "laravel/framework": "^8.0|^9.0|^10.0"
