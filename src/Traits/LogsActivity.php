@@ -7,27 +7,51 @@ use Loctracker\ActivityLogger\Facades\ActivityLogger;
 
 trait LogsActivity
 {
+    /**
+     * Get the attributes that should be logged
+     */
+    public static function getLogAttributes(): ?array
+    {
+        return static::$logAttributes ?? config('activity-logger.log_attributes', []);
+    }
+
+    /**
+     * Get the attributes that should be excluded from logging
+     */
+    public static function getLogExcept(): ?array
+    {
+        return static::$logExcept ?? config('activity-logger.log_except', []);
+    }
+
     protected static function bootLogsActivity()
     {
-        static::created(function (Model $model) {
-            static::logActivity('created', $model);
-        });
+        $events = config('activity-logger.log_events', []);
 
-        static::updated(function (Model $model) {
-            $changes = $model->getDirty();
-            if (!empty($changes)) {
-                static::logActivity('updated', $model, [
-                    'old' => array_intersect_key($model->getOriginal(), $changes),
-                    'attributes' => $changes
-                ]);
-            }
-        });
+        if ($events['created'] ?? true) {
+            static::created(function (Model $model) {
+                static::logActivity('created', $model);
+            });
+        }
 
-        static::deleted(function (Model $model) {
-            static::logActivity('deleted', $model);
-        });
+        if ($events['updated'] ?? true) {
+            static::updated(function (Model $model) {
+                $changes = $model->getDirty();
+                if (!empty($changes)) {
+                    static::logActivity('updated', $model, [
+                        'old' => array_intersect_key($model->getOriginal(), $changes),
+                        'attributes' => $changes
+                    ]);
+                }
+            });
+        }
 
-        if (method_exists(static::class, 'restored')) {
+        if ($events['deleted'] ?? true) {
+            static::deleted(function (Model $model) {
+                static::logActivity('deleted', $model);
+            });
+        }
+
+        if (($events['restored'] ?? true) && method_exists(static::class, 'restored')) {
             static::restored(function (Model $model) {
                 static::logActivity('restored', $model);
             });
@@ -36,21 +60,51 @@ trait LogsActivity
 
     protected static function logActivity(string $action, Model $model, array $properties = [])
     {
-        // Get only the specified attributes if defined
-        if (isset(static::$logAttributes)) {
-            $properties['logged_attributes'] = array_intersect_key(
-                $model->getAttributes(),
-                array_flip(static::$logAttributes)
-            );
+        // Get the default properties if configured
+        $defaultProps = config('activity-logger.default_log_properties', []);
+        if ($defaultProps['ip_address'] ?? false) {
+            $properties['ip_address'] = request()->ip();
+        }
+        if ($defaultProps['user_agent'] ?? false) {
+            $properties['user_agent'] = request()->userAgent();
+        }
+        if ($defaultProps['request_method'] ?? false) {
+            $properties['request_method'] = request()->method();
+        }
+        if ($defaultProps['request_url'] ?? false) {
+            $properties['request_url'] = request()->fullUrl();
         }
 
-        // Exclude specific attributes if defined
-        if (isset(static::$logExcept)) {
-            $properties['logged_attributes'] = array_diff_key(
-                $model->getAttributes(),
-                array_flip(static::$logExcept)
+        // Handle attribute logging
+        $logAttributes = static::getLogAttributes();
+        $logExcept = static::getLogExcept();
+        $attributes = $model->getAttributes();
+
+        if (!empty($logAttributes)) {
+            // Log only specified attributes
+            $properties['logged_attributes'] = array_intersect_key(
+                $attributes,
+                array_flip($logAttributes)
             );
+        } elseif (!empty($logExcept)) {
+            // Log all attributes except specified ones
+            $properties['logged_attributes'] = array_diff_key(
+                $attributes,
+                array_flip($logExcept)
+            );
+        } else {
+            // Log all attributes
+            $properties['logged_attributes'] = $attributes;
         }
+
+        // Filter out any sensitive data defined in config
+        $sensitiveFields = config('activity-logger.sensitive_fields', ['password', 'remember_token']);
+        foreach ($sensitiveFields as $field) {
+            if (isset($properties['logged_attributes'][$field])) {
+                $properties['logged_attributes'][$field] = '******';
+            }
+        }
+
         $description = sprintf(
             '%s %s %s',
             class_basename($model),
@@ -58,15 +112,20 @@ trait LogsActivity
             $model->getKey()
         );
 
-        // Get the causer (authenticated user) or capture IP if no user
+        // Get the causer (authenticated user)
         $causer = auth()->user();
-        if (!$causer) {
-            $properties['ip_address'] = request()->ip();
-            $properties['user_agent'] = request()->userAgent();
+
+        $logger = app('activitylogger');
+
+        if ($causer) {
+            $logger->causedBy($causer);
         }
 
-        ActivityLogger::causedBy($causer)
-            ->withProperties($properties)
+        if (config('activity-logger.queue.enabled')) {
+            $logger->withQueue();
+        }
+
+        $logger->withProperties($properties)
             ->log($action, $description, $model);
     }
 
@@ -75,6 +134,9 @@ trait LogsActivity
      */
     public function activities()
     {
-        return $this->morphMany(config('activity-logger.activity_model', \Loctracker\ActivityLogger\Models\ActivityLog::class), 'subject');
+        return $this->morphMany(
+            config('activity-logger.activity_model'),
+            'subject'
+        );
     }
 }

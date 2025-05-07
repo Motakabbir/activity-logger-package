@@ -10,7 +10,13 @@ class ActivityLog extends Model
 {
     use ActivityLogReporting;
 
-    protected $table = 'activity_logs';
+    /**
+     * Get the table name from config
+     */
+    public function getTable()
+    {
+        return config('activity-logger.table_name', 'activity_logs');
+    }
 
     protected $fillable = [
         'action',
@@ -23,7 +29,9 @@ class ActivityLog extends Model
     ];
 
     protected $casts = [
-        'properties' => 'array'
+        'properties' => 'array',
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
     /**
@@ -43,6 +51,33 @@ class ActivityLog extends Model
     }
 
     /**
+     * Format dates according to config
+     */
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format(config('activity-logger.date_format', 'Y-m-d H:i:s'));
+    }
+
+    /**
+     * Override toArray to limit properties size
+     */
+    public function toArray()
+    {
+        $array = parent::toArray();
+
+        $maxSize = config('activity-logger.properties_max_size', 100000);
+
+        if (isset($array['properties']) && strlen(json_encode($array['properties'])) > $maxSize) {
+            $array['properties'] = [
+                'error' => 'Properties exceeded maximum size',
+                'size' => strlen(json_encode($array['properties']))
+            ];
+        }
+
+        return $array;
+    }
+
+    /**
      * Export activities to CSV
      */
     public function exportToCsv($query, $filePath)
@@ -54,28 +89,28 @@ class ActivityLog extends Model
             'Subject Type',
             'Subject ID',
             'Causer Type',
-            'Causer ID/IP',
+            'Causer ID',
             'Properties'
         ];
 
-        $file = fopen($filePath, 'w');
-        fputcsv($file, $headers);
+        $handle = fopen($filePath, 'w');
+        fputcsv($handle, $headers);
 
-        $query->chunk(1000, function ($activities) use ($file) {
+        $query->chunk(1000, function ($activities) use ($handle) {
             foreach ($activities as $activity) {
-                fputcsv($file, [
+                fputcsv($handle, [
                     $activity->created_at,
                     $activity->action,
                     $activity->description,
                     $activity->subject_type,
                     $activity->subject_id,
                     $activity->causer_type,
-                    $activity->causer_id ?? ($activity->properties['ip_address'] ?? 'N/A'),
+                    $activity->causer_id,
                     json_encode($activity->properties)
                 ]);
             }
         });
 
-        fclose($file);
+        fclose($handle);
     }
 }
